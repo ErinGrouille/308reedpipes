@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+
+
+import sys
+import numpy
+
+def properly_exit(ret=84, err='', where=sys.stderr):
+	if err != '':
+		print(err, file=where)
+	sys.exit(ret)
+usg = """
+USAGE
+	./308reedpipes r0 r5 r10 r15 r20 n
+
+DESCRIPTION
+	r0	radius (in cm) of pipe at the 0cm abscissa
+	r5	radius (in cm) of pipe at the 5cm abscissa
+	r10	radius (in cm) of pipe at the 10cm abscissa
+	r15	radius (in cm) of pipe at the 15cm abscissa
+	r20	radius (in cm) of pipe at the 20cm abscissa
+	n 	number of points needed to display the radius
+"""
+
+if len(sys.argv) == 2 and (sys.argv[1] == '-h' or sys.argv[1] == '--help'):
+	properly_exit(0, usg, sys.stdout)
+if len(sys.argv) != 7:
+	properly_exit(err=usg)
+try:
+	r0,r5,r10,r15,r20,n = float(sys.argv[1]),float(sys.argv[2]),float(sys.argv[3]),float(sys.argv[4]),float(sys.argv[5]),int(sys.argv[6])
+	Xs = [0,5,10,15,20]
+	Ys = [r0,r5,r10,r15,r20]
+	if (r0 <= 0 or r5 <= 0 or r10 <= 0 or r15 <= 0 or r20 <= 0 or n <= 0):
+		properly_exit(err='All parameters must be strictly positive. Use \'-h\' or \'--help\' for usage.')
+except Exception as e:
+	properly_exit(err='Error occured : ' + str(e))
+
+
+# testXs = [0.0,0.5,1.0,1.5,2.0]
+# testYs = [0.0,0.4794,0.8415,0.9975,0.9093]
+
+# Xs = testXs
+# Ys = testYs
+
+def step1():
+	global Xs
+	h = []
+	for i in range(0, 4):
+		h.append(Xs[i+1]-Xs[i])
+	return h
+def step2(h,F0=None,Fn=None):
+	global Ys
+	F = [0.0,0.0,0.0,0.0,0.0] # NATURAL SPLINE
+	# F = [F0,0,0,0,Fn] # ADDITIONAL INFO
+	for i in range(1, 4):
+		F[i] = ((Ys[i+1] - Ys[i]) / h[i]) - ((Ys[i] - Ys[i-1]) / h[i-1])
+	return F
+def step3(h):
+	R = []
+	for i in range(5):
+		R.append([0.0,0.0,0.0,0.0,0.0])
+	R[0][0] = 1
+	R[4][4] = 1
+	for i in range(1,4):
+		R[i][i] = (h[i-1]+h[i]) / 3
+	for i in range(1,4):
+		R[i][i+1] = h[i] / 6
+	for i in range(1,4):
+		R[i][i-1] = h[i-1] / 6
+	for i in range(5):
+		for j in range(5):
+			R[i][j] = R[i][j]
+	return R
+def step4(R,F):
+	tmpR = numpy.array(R)
+	tmpF = numpy.array(F)
+	invR = numpy.linalg.inv(tmpR)
+	npres = numpy.matmul(invR, F)
+	res = []
+	for v in npres:
+		res.append(v)
+	return res
+def step5(h, M):
+	global Ys
+	C = []
+	Cprime = []
+	for i in range(0, 4):
+		C.append(	((Ys[i+1])-(Ys[i]))/(h[i])	- (h[i]/6)*(M[i+1]-M[i])		)
+		Cprime.append(Ys[i]-M[i]*((h[i]**2)/6))
+	return C, Cprime
+def step6(x, k, M, C, Cprime):
+	global Xs
+	res =	(M[k] * ( ((Xs[k+1]-x)**3) / (6 * h[k]))) +\
+			(M[k+1] * ( ((x-Xs[k])**3) / (6 * h[k]))) +\
+			(C[k] * (x - Xs[k])) + Cprime[k]
+	return res
+h = step1()
+F = step2(h)
+R = step3(h)
+M = step4(R, F)
+C, Cprime = step5(h,M)
+vectorResult = []
+for i in range(5):
+	vectorResult.append(round(M[i], 1))
+	if vectorResult[i] == -0:
+		vectorResult[i] = 0.0
+i = 0.0
+print('vector result:', vectorResult)
+while i < 20.0:
+	print('abscissa: %.1f cm' % i , '\tradius: %.1f cm' % step6(i, int(i/5), M, C, Cprime) ,sep='')
+	i += 20/(n-1)
+print('abscissa: 20.0 cm' , '\tradius: %.1f cm' % r20 ,sep='')
